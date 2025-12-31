@@ -134,14 +134,13 @@ def download_excel_file(force_refresh=False):
             public_key = 'https://disk.yandex.ru/i/gFvPIdO1gBanpw'
             
             # Получаем прямую ссылку для скачивания
-            final_url = base_url + urlencode({'public_key': public_key})
+            final_url = base_url + urlencode(dict(public_key=public_key))
             logger.debug(f"Запрос ссылки: {final_url}")
             
-            response = requests.get(final_url, timeout=15)
+            response = requests.get(final_url)
             response.raise_for_status()
             
-            download_data = response.json()
-            download_url = download_data.get('href')
+            download_url = response.json()['href']
             
             if not download_url:
                 logger.error("❌ Не удалось получить ссылку для скачивания")
@@ -150,7 +149,7 @@ def download_excel_file(force_refresh=False):
             logger.debug(f"Прямая ссылка: {download_url[:100]}...")
             
             # Скачиваем файл
-            download_response = requests.get(download_url, timeout=30)
+            download_response = requests.get(download_url)
             download_response.raise_for_status()
             
             # Сохраняем файл
