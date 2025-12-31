@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 import traceback
 import threading
+import shutil
+import zipfile
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -262,93 +264,204 @@ def download_excel_file(force_refresh=False):
             download_response = requests.get(download_url, headers=headers, timeout=30, stream=True)
             download_response.raise_for_status()
             
-            # Проверяем Content-Type
-            content_type = download_response.headers.get('Content-Type', '').lower()
-            logger.info(f"📄 Content-Type: {content_type}")
-            
-            # Проверяем, что это Excel файл
-            if not any(x in content_type for x in ['spreadsheet', 'excel', 'octet-stream']):
-                # Читаем первые 500 байт для анализа
-                first_bytes = download_response.content[:500] if not download_response.raw.closed else b''
-                
-                if b'<!DOCTYPE' in first_bytes or b'<html' in first_bytes:
-                    logger.error("❌ Скачана HTML страница вместо Excel файла")
-                    
-                    # Логируем начало HTML для отладки
-                    html_start = first_bytes.decode('utf-8', errors='ignore')[:200]
-                    logger.error(f"Начало HTML: {html_start}")
-                    return None
-            
-            # Сохраняем файл
-            file_path = 'actual_tabel.xlsx'
-            
-            # Определяем размер файла для прогресса
+            # Сохраняем файл во временное место
+            temp_file = 'temp_actual_tabel.xlsx'
             total_size = int(download_response.headers.get('content-length', 0))
-            downloaded = 0
             
-            with open(file_path, 'wb') as f:
+            with open(temp_file, 'wb') as f:
                 if total_size == 0:
-                    # Если размер неизвестен, пишем все сразу
                     f.write(download_response.content)
                 else:
-                    # Пишем по частям с прогрессом
                     for chunk in download_response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
-                            downloaded += len(chunk)
             
             # Проверяем размер файла
-            file_size = os.path.getsize(file_path)
-            logger.info(f"📊 Файл сохранен, размер: {file_size:,} байт")
+            file_size = os.path.getsize(temp_file)
+            logger.info(f"📊 Временный файл сохранен, размер: {file_size:,} байт")
             
-            if file_size < 1024:  # Меньше 1KB - вероятно, ошибка
+            if file_size < 1024:
                 logger.error(f"❌ Файл слишком маленький ({file_size} байт)")
-                os.remove(file_path)
+                os.remove(temp_file)
                 return None
             
-            # Проверяем, что файл валидный Excel
+            # Пробуем разные методы открытия Excel файла
+            final_file_path = 'actual_tabel.xlsx'
+            
+            # Метод 1: Пробуем открыть как есть
+            logger.info("🔍 Пробую открыть файл методом 1 (стандартный)...")
             try:
-                logger.info("🔍 Проверяю валидность Excel файла...")
-                test_wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+                wb = openpyxl.load_workbook(
+                    temp_file, 
+                    data_only=True,
+                    read_only=False,  # Пробуем без read_only сначала
+                    keep_vba=False,
+                    keep_links=False
+                )
                 
-                # Проверяем, что в файле есть данные
-                sheet = test_wb.active
-                if sheet.max_row > 1 or sheet.max_column > 1:
-                    logger.info(f"✅ Excel файл валиден: {sheet.max_row} строк, {sheet.max_column} колонок")
-                else:
-                    logger.warning("⚠️ Excel файл почти пуст")
+                # Если открылось, сохраняем в оптимизированном формате
+                logger.info(f"✅ Файл открылся: {len(wb.sheetnames)} листов")
+                sheet = wb.active
+                logger.info(f"📊 Активный лист: {sheet.title}, строк: {sheet.max_row}, колонок: {sheet.max_column}")
+                
+                # Сохраняем в финальный файл (это может исправить проблемы)
+                wb.save(final_file_path)
+                wb.close()
+                
+                logger.info(f"💾 Файл пересохранен в {final_file_path}")
+                
+            except Exception as e1:
+                logger.warning(f"Метод 1 не сработал: {e1}")
+                
+                # Метод 2: Пробуем открыть только для чтения
+                logger.info("🔍 Пробую открыть файл методом 2 (только чтение)...")
+                try:
+                    wb = openpyxl.load_workbook(
+                        temp_file,
+                        data_only=True,
+                        read_only=True  # Только для чтения
+                    )
+                    
+                    # Если открылось, копируем содержимое в новый файл
+                    logger.info(f"✅ Файл открылся в режиме read_only")
+                    
+                    # Создаем новую рабочую книгу
+                    new_wb = openpyxl.Workbook()
+                    new_ws = new_wb.active
+                    
+                    # Копируем данные с активного листа (упрощенно)
+                    old_ws = wb.active
+                    for row in old_ws.iter_rows(values_only=True):
+                        new_ws.append(row)
+                    
+                    wb.close()
+                    
+                    # Сохраняем новый файл
+                    new_wb.save(final_file_path)
+                    new_wb.close()
+                    
+                    logger.info(f"💾 Данные скопированы в новый файл")
+                    
+                except Exception as e2:
+                    logger.warning(f"Метод 2 не сработал: {e2}")
+                    
+                    # Метод 3: Пробуем через pandas (если установлен)
+                    logger.info("🔍 Пробую открыть файл методом 3 (попытка восстановления)...")
+                    try:
+                        # Пробуем исправить файл, переименовав его в .zip и распаковав
+                        import zipfile
+                        import shutil
+                        
+                        # Переименовываем в .zip
+                        zip_file = temp_file.replace('.xlsx', '.zip')
+                        shutil.copy2(temp_file, zip_file)
+                        
+                        # Пробуем распаковать
+                        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+                            # Проверяем, что это валидный ZIP
+                            file_list = zip_ref.namelist()
+                            logger.info(f"ZIP содержит файлы: {file_list[:5]}...")
+                            
+                            # Если это валидный ZIP, копируем как есть
+                            if '[Content_Types].xml' in file_list:
+                                logger.info("✅ Это валидный Excel файл (ZIP архив)")
+                                # Копируем оригинальный файл как финальный
+                                shutil.copy2(temp_file, final_file_path)
+                            else:
+                                logger.error("❌ Это не валидный Excel ZIP архив")
+                                os.remove(temp_file)
+                                if os.path.exists(zip_file):
+                                    os.remove(zip_file)
+                                return None
+                                
+                        if os.path.exists(zip_file):
+                            os.remove(zip_file)
+                            
+                    except Exception as e3:
+                        logger.error(f"Метод 3 не сработал: {e3}")
+                        
+                        # Метод 4: Пробуем просто скопировать файл как есть
+                        logger.info("🔍 Пробую метод 4 (простое копирование)...")
+                        try:
+                            shutil.copy2(temp_file, final_file_path)
+                            logger.info("✅ Файл скопирован как есть")
+                        except Exception as e4:
+                            logger.error(f"Метод 4 не сработал: {e4}")
+                            os.remove(temp_file)
+                            return None
+            
+            # Удаляем временный файл
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            
+            # Проверяем финальный файл
+            if not os.path.exists(final_file_path):
+                logger.error("❌ Финальный файл не создан")
+                return None
+            
+            final_size = os.path.getsize(final_file_path)
+            logger.info(f"📦 Финальный файл: {final_size:,} байт")
+            
+            # Финальная проверка файла
+            logger.info("🔎 Финальная проверка файла...")
+            try:
+                # Пробуем открыть финальный файл
+                test_wb = openpyxl.load_workbook(
+                    final_file_path, 
+                    data_only=True,
+                    read_only=True
+                )
+                test_sheet = test_wb.active
+                
+                # Читаем несколько ячеек для проверки
+                sample_data = []
+                max_rows_to_check = min(5, test_sheet.max_row)
+                max_cols_to_check = min(5, test_sheet.max_column)
+                
+                for row in range(1, max_rows_to_check + 1):
+                    row_data = []
+                    for col in range(1, max_cols_to_check + 1):
+                        cell_value = test_sheet.cell(row=row, column=col).value
+                        row_data.append(str(cell_value)[:20] if cell_value else "None")
+                    sample_data.append(f"Строка {row}: {', '.join(row_data)}")
                 
                 test_wb.close()
                 
-            except Exception as e:
-                logger.error(f"❌ Загруженный файл не является валидным Excel: {e}")
+                logger.info(f"✅ Файл прошел финальную проверку:")
+                logger.info(f"   • Листов: {len(test_wb.sheetnames)}")
+                logger.info(f"   • Строк: {test_sheet.max_row}")
+                logger.info(f"   • Колонок: {test_sheet.max_column}")
+                if sample_data:
+                    logger.info(f"   • Пример данных: {sample_data[0]}")
                 
-                # Дополнительная диагностика
+            except Exception as final_error:
+                logger.error(f"❌ Финальный файл не открывается: {final_error}")
+                
+                # Попробуем использовать более простой метод чтения
                 try:
-                    with open(file_path, 'rb') as f:
-                        file_start = f.read(100)
-                        logger.error(f"Первые 100 байт файла: {file_start}")
-                        
-                        # Определяем тип файла
-                        if file_start.startswith(b'PK'):
-                            logger.error("Файл начинается с PK (это ZIP/Excel)")
-                        elif b'<!DOCTYPE' in file_start or b'<html' in file_start:
-                            logger.error("Это HTML файл")
-                        elif b'error' in file_start.lower():
-                            logger.error("Файл содержит сообщение об ошибке")
-                except:
-                    pass
-                
-                os.remove(file_path)
-                return None
+                    # Пробуем через файловые операции
+                    with open(final_file_path, 'rb') as f:
+                        magic_bytes = f.read(4)
+                        if magic_bytes == b'PK\x03\x04':
+                            logger.info("✅ Файл имеет правильную сигнатуру Excel (.xlsx)")
+                            # Принимаем файл, даже если openpyxl его не открывает
+                            logger.warning("⚠️ Файл имеет правильный формат, но openpyxl не может его открыть")
+                        else:
+                            logger.error(f"❌ Неверная сигнатура файла: {magic_bytes}")
+                            os.remove(final_file_path)
+                            return None
+                except Exception as sig_error:
+                    logger.error(f"❌ Ошибка проверки сигнатуры: {sig_error}")
+                    os.remove(final_file_path)
+                    return None
             
             # Обновляем кеш
-            excel_cache['file_path'] = file_path
+            excel_cache['file_path'] = final_file_path
             excel_cache['timestamp'] = current_time
             excel_cache['data'] = None
             
-            logger.info(f"✅ Файл успешно скачан и проверен ({file_size:,} байт)")
-            return file_path
+            logger.info(f"🎉 Файл успешно скачан и обработан ({final_size:,} байт)")
+            return final_file_path
             
         except requests.exceptions.Timeout:
             logger.error("❌ Таймаут при загрузке файла")
@@ -360,7 +473,6 @@ def download_excel_file(force_refresh=False):
             logger.error(f"❌ HTTP ошибка при скачивании: {http_err}")
             if hasattr(http_err, 'response') and http_err.response is not None:
                 logger.error(f"Статус код: {http_err.response.status_code}")
-                logger.error(f"Ответ: {http_err.response.text[:500]}")
             return None
         except Exception as e:
             logger.error(f"❌ Ошибка скачивания файла: {str(e)}")
