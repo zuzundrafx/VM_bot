@@ -27,7 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Безопасное получение токена
-TOKEN = os.getenv('BOT_TOKEN')
+TOKEN = os.getenv('BOT_TOKEN', '7084552505:AAECx4YcUNDJV9SV-Dd4VEddpjyBnR_IBiA')
 if not TOKEN:
     logger.error("❌ BOT_TOKEN не найден в переменных окружения!")
     logger.error("Добавьте BOT_TOKEN в переменные окружения или .env файл")
