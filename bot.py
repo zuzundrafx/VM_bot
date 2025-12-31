@@ -119,10 +119,10 @@ def get_yandex_disk_download_link():
     """Получение прямой ссылки для скачивания файла с Яндекс.Диска"""
     try:
         # Исходная ссылка
-        view_url = 'https://disk.yandex.ru/i/gFvPIdO1gBanpw'
+        view_url = 'https://disk.yandex.ru/i/cyOG-61LXGmE-g'
         
         # Извлекаем ID файла из ссылки
-        file_id = view_url.split('/')[-1]  # gFvPIdO1gBanpw
+        file_id = view_url.split('/')[-1]  # cyOG-61LXGmE-g
         
         logger.info(f"🔄 Получаем ссылку для скачивания файла с ID: {file_id}")
         
@@ -246,7 +246,7 @@ def download_excel_file(force_refresh=False):
                 
                 # Пробуем использовать запасной метод
                 logger.info("🔄 Пробую запасной метод...")
-                file_id = 'gFvPIdO1gBanpw'
+                file_id = 'cyOG-61LXGmE-g'
                 download_url = f'https://getfile.dokpub.com/yandex/get/{file_id}'
                 logger.info(f"Использую запасную ссылку: {download_url}")
             
