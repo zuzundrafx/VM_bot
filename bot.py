@@ -98,7 +98,7 @@ def menu(message):
             user_id_str = str(user_id)
 
             base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
-            public_key = 'https://disk.yandex.ru/i/gFvPIdO1gBanpw'
+            public_key = 'https://disk.yandex.ru/i/cyOG-61LXGmE-g'
 
             final_url = base_url + urlencode(dict(public_key=public_key))
             response = requests.get(final_url)
