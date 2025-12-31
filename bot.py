@@ -113,8 +113,115 @@ class ExcelProcessor:
 # Инициализация процессора Excel
 excel_processor = ExcelProcessor()
 
+def get_yandex_disk_download_link():
+    """Получение прямой ссылки для скачивания файла с Яндекс.Диска"""
+    try:
+        # Исходная ссылка
+        view_url = 'https://disk.yandex.ru/i/gFvPIdO1gBanpw'
+        
+        # Извлекаем ID файла из ссылки
+        file_id = view_url.split('/')[-1]  # gFvPIdO1gBanpw
+        
+        logger.info(f"🔄 Получаем ссылку для скачивания файла с ID: {file_id}")
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/json'
+        }
+        
+        # Метод 1: Пробуем получить через публичный API с разными форматами
+        api_formats = [
+            f'https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=https://yadi.sk/i/{file_id}',
+            f'https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key={view_url}',
+        ]
+        
+        for api_url in api_formats:
+            try:
+                logger.debug(f"Пробуем API URL: {api_url}")
+                response = requests.get(api_url, headers=headers, timeout=10)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if 'href' in data and data['href']:
+                        download_url = data['href']
+                        logger.info(f"✅ Получена ссылка через API: {download_url[:100]}...")
+                        return download_url
+                    else:
+                        logger.warning(f"API не вернул ссылку, ответ: {data}")
+                elif response.status_code == 404:
+                    logger.warning(f"API вернул 404 для URL: {api_url}")
+                else:
+                    logger.warning(f"API вернул статус {response.status_code} для URL: {api_url}")
+                    
+            except requests.exceptions.Timeout:
+                logger.warning(f"Таймаут для API URL: {api_url}")
+                continue
+            except Exception as e:
+                logger.debug(f"Ошибка для API URL {api_url}: {e}")
+                continue
+        
+        # Метод 2: Используем альтернативный сервис getfile.dokpub.com
+        logger.info("Пробуем через getfile.dokpub.com...")
+        direct_url = f'https://getfile.dokpub.com/yandex/get/{file_id}'
+        
+        # Проверяем ссылку
+        try:
+            test_response = requests.head(direct_url, timeout=5, allow_redirects=True)
+            if test_response.status_code in [200, 302, 307]:
+                logger.info(f"✅ Прямая ссылка работает: статус {test_response.status_code}")
+                return direct_url
+        except Exception as e:
+            logger.debug(f"Ссылка getfile.dokpub.com не сработала: {e}")
+        
+        # Метод 3: Пробуем скачать через web-интерфейс
+        logger.info("Пробуем получить ссылку через веб-интерфейс...")
+        
+        session = requests.Session()
+        view_response = session.get(view_url, headers=headers, timeout=10)
+        
+        if view_response.status_code == 200:
+            html = view_response.text
+            
+            # Ищем ссылку на скачивание в HTML
+            import re
+            
+            # Паттерны для поиска ссылок на скачивание
+            patterns = [
+                r'"downloadUrl"\s*:\s*"([^"]+)"',
+                r'"url"\s*:\s*"([^"]+)"',
+                r'href="(https://[^"]+download[^"]+)"',
+                r'https://[^"]+\.xlsx(?:\?[^"]*)?',
+                r'https://downloader\.disk\.yandex\.ru[^"\']+',
+            ]
+            
+            for pattern in patterns:
+                matches = re.findall(pattern, html)
+                for match in matches:
+                    if '.xlsx' in match or 'download' in match.lower():
+                        download_url = match.replace('\\/', '/').replace('\\u0026', '&')
+                        logger.info(f"Найдена ссылка в HTML по паттерну {pattern}: {download_url[:100]}...")
+                        
+                        # Проверяем ссылку
+                        try:
+                            test_resp = session.head(download_url, timeout=5, allow_redirects=True)
+                            if test_resp.status_code in [200, 302, 307]:
+                                logger.info(f"✅ Ссылка из HTML работает: {download_url[:100]}...")
+                                return download_url
+                        except Exception as test_e:
+                            logger.debug(f"Ссылка из HTML не работает: {test_e}")
+                            continue
+        
+        logger.error("❌ Не удалось получить ссылку для скачивания ни одним методом")
+        return None
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения ссылки: {e}")
+        logger.error(traceback.format_exc())
+        return None
+
+
 def download_excel_file(force_refresh=False):
-    """Скачивание и кеширование Excel файла"""
+    """Скачивание и кеширование Excel файла с Яндекс.Диска"""
     with excel_cache['lock']:
         current_time = time.time()
         
@@ -129,40 +236,110 @@ def download_excel_file(force_refresh=False):
         try:
             logger.info("⬇️ Начинаем загрузку Excel файла...")
             
-            # Публичная ссылка на Яндекс.Диск
-            base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
-            public_key = 'https://disk.yandex.ru/i/gFvPIdO1gBanpw'
-            
             # Получаем прямую ссылку для скачивания
-            final_url = base_url + urlencode(dict(public_key=public_key))
-            logger.debug(f"Запрос ссылки: {final_url}")
-            
-            response = requests.get(final_url)
-            response.raise_for_status()
-            
-            download_url = response.json()['href']
+            download_url = get_yandex_disk_download_link()
             
             if not download_url:
                 logger.error("❌ Не удалось получить ссылку для скачивания")
-                return None
+                
+                # Пробуем использовать запасной метод
+                logger.info("🔄 Пробую запасной метод...")
+                file_id = 'gFvPIdO1gBanpw'
+                download_url = f'https://getfile.dokpub.com/yandex/get/{file_id}'
+                logger.info(f"Использую запасную ссылку: {download_url}")
             
-            logger.debug(f"Прямая ссылка: {download_url[:100]}...")
+            # Настраиваем заголовки для имитации браузера
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, */*',
+                'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Referer': 'https://disk.yandex.ru/'
+            }
             
-            # Скачиваем файл
-            download_response = requests.get(download_url)
+            logger.info(f"🔗 Скачиваю по ссылке: {download_url[:100]}...")
+            
+            # Скачиваем файл с таймаутом
+            download_response = requests.get(download_url, headers=headers, timeout=30, stream=True)
             download_response.raise_for_status()
+            
+            # Проверяем Content-Type
+            content_type = download_response.headers.get('Content-Type', '').lower()
+            logger.info(f"📄 Content-Type: {content_type}")
+            
+            # Проверяем, что это Excel файл
+            if not any(x in content_type for x in ['spreadsheet', 'excel', 'octet-stream']):
+                # Читаем первые 500 байт для анализа
+                first_bytes = download_response.content[:500] if not download_response.raw.closed else b''
+                
+                if b'<!DOCTYPE' in first_bytes or b'<html' in first_bytes:
+                    logger.error("❌ Скачана HTML страница вместо Excel файла")
+                    
+                    # Логируем начало HTML для отладки
+                    html_start = first_bytes.decode('utf-8', errors='ignore')[:200]
+                    logger.error(f"Начало HTML: {html_start}")
+                    return None
             
             # Сохраняем файл
             file_path = 'actual_tabel.xlsx'
-            with open(file_path, 'wb') as f:
-                f.write(download_response.content)
             
-            # Проверяем, что файл валидный
+            # Определяем размер файла для прогресса
+            total_size = int(download_response.headers.get('content-length', 0))
+            downloaded = 0
+            
+            with open(file_path, 'wb') as f:
+                if total_size == 0:
+                    # Если размер неизвестен, пишем все сразу
+                    f.write(download_response.content)
+                else:
+                    # Пишем по частям с прогрессом
+                    for chunk in download_response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+            
+            # Проверяем размер файла
+            file_size = os.path.getsize(file_path)
+            logger.info(f"📊 Файл сохранен, размер: {file_size:,} байт")
+            
+            if file_size < 1024:  # Меньше 1KB - вероятно, ошибка
+                logger.error(f"❌ Файл слишком маленький ({file_size} байт)")
+                os.remove(file_path)
+                return None
+            
+            # Проверяем, что файл валидный Excel
             try:
+                logger.info("🔍 Проверяю валидность Excel файла...")
                 test_wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+                
+                # Проверяем, что в файле есть данные
+                sheet = test_wb.active
+                if sheet.max_row > 1 or sheet.max_column > 1:
+                    logger.info(f"✅ Excel файл валиден: {sheet.max_row} строк, {sheet.max_column} колонок")
+                else:
+                    logger.warning("⚠️ Excel файл почти пуст")
+                
                 test_wb.close()
+                
             except Exception as e:
                 logger.error(f"❌ Загруженный файл не является валидным Excel: {e}")
+                
+                # Дополнительная диагностика
+                try:
+                    with open(file_path, 'rb') as f:
+                        file_start = f.read(100)
+                        logger.error(f"Первые 100 байт файла: {file_start}")
+                        
+                        # Определяем тип файла
+                        if file_start.startswith(b'PK'):
+                            logger.error("Файл начинается с PK (это ZIP/Excel)")
+                        elif b'<!DOCTYPE' in file_start or b'<html' in file_start:
+                            logger.error("Это HTML файл")
+                        elif b'error' in file_start.lower():
+                            logger.error("Файл содержит сообщение об ошибке")
+                except:
+                    pass
+                
+                os.remove(file_path)
                 return None
             
             # Обновляем кеш
@@ -170,9 +347,7 @@ def download_excel_file(force_refresh=False):
             excel_cache['timestamp'] = current_time
             excel_cache['data'] = None
             
-            file_size = os.path.getsize(file_path)
-            logger.info(f"✅ Файл успешно скачан ({file_size:,} байт)")
-            
+            logger.info(f"✅ Файл успешно скачан и проверен ({file_size:,} байт)")
             return file_path
             
         except requests.exceptions.Timeout:
@@ -180,6 +355,12 @@ def download_excel_file(force_refresh=False):
             return None
         except requests.exceptions.ConnectionError:
             logger.error("❌ Ошибка соединения при загрузке файла")
+            return None
+        except requests.exceptions.HTTPError as http_err:
+            logger.error(f"❌ HTTP ошибка при скачивании: {http_err}")
+            if hasattr(http_err, 'response') and http_err.response is not None:
+                logger.error(f"Статус код: {http_err.response.status_code}")
+                logger.error(f"Ответ: {http_err.response.text[:500]}")
             return None
         except Exception as e:
             logger.error(f"❌ Ошибка скачивания файла: {str(e)}")
