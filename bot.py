@@ -90,7 +90,7 @@ def menu(message):
                         opit_k_column = cell1.column
 
             if id_check == True:
-                bot.send_message(message.chat.id, "Должность: " +  str(sheet.cell(hours_row, spec_column).value) + " \nДата трудоустройства: " + str(sheet.cell(hours_row, date_priem_column).value) + "\nКоэффициент за стаж: " + str(sheet.cell(hours_row, stazh_k_column).value) + " %" + "\nЧасовая ставка: " + str(sheet.cell(hours_row, opit_k_column).value) + " %")
+                bot.send_message(message.chat.id, "Должность: " +  str(sheet.cell(hours_row, spec_column).value) + " \nДата трудоустройства: " + str(sheet.cell(hours_row, date_priem_column).value) + "\nКоэффициент за стаж: " + str(sheet.cell(hours_row, stazh_k_column).value) + " %" + "\nЧасовая ставка: " + str(sheet.cell(hours_row, opit_k_column).value) + " руб/ч")
 
         elif message.text == "Табель":
             bot.send_message(message.chat.id, "Ожидайте, готовлю отчет")
