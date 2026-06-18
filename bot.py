@@ -145,6 +145,9 @@ def menu(message):
                     if cell1.value == "ЗП (почасовка + премии + стаж + опыт + квартиры)":
                         zp_column = cell1.column
 
+                    if cell1.value == "Водители":
+                        drivers_column = cell1.column
+
                 if id_check == True:
                     if str(sheet.cell(hours_row, compens_column).value) == "None":
                         sheet.cell(hours_row, compens_column).value = "0"
@@ -152,7 +155,7 @@ def menu(message):
                         sheet.cell(hours_row, premia_column).value = "0"
 
             if id_check == True:
-                bot.send_message(message.chat.id, "Отработано: " +  str(sheet.cell(hours_row, hours_column).value) + " часов \nПочасовка: " + str(sheet.cell(hours_row, zarplata_pochas_column).value) + " рублей \nПремия: " + str(sheet.cell(hours_row, premia_column).value) + " рублей \nЗа опыт: " + str(sheet.cell(hours_row, za_opit_column).value) + " рублей \nЗа стаж: " + str(sheet.cell(hours_row, za_stazh_column).value) + " рублей \nЗа квартиру: " + str(sheet.cell(hours_row, kvart_column).value) + " рублей \n*Общая ЗП: *" + str(sheet.cell(hours_row, zp_column).value) + " рублей \n \nКомпенсации: " + str(sheet.cell(hours_row, compens_column).value) + " рублей", parse_mode='Markdown')
+                bot.send_message(message.chat.id, "Отработано: " +  str(sheet.cell(hours_row, hours_column).value) + " часов \nПочасовка: " + str(sheet.cell(hours_row, zarplata_pochas_column).value) + " рублей \nПремия: " + str(sheet.cell(hours_row, premia_column).value) + " рублей \nЗа опыт: " + str(sheet.cell(hours_row, za_opit_column).value) + " рублей \nЗа стаж: " + str(sheet.cell(hours_row, za_stazh_column).value) + " рублей \nЗа квартиру: " + str(sheet.cell(hours_row, kvart_column).value) + " рублей \nВодительские: " + str(sheet.cell(hours_row, drivers_column).value) + " рублей \n*Общая ЗП: *" + str(sheet.cell(hours_row, zp_column).value) + " рублей \n \nКомпенсации: " + str(sheet.cell(hours_row, compens_column).value) + " рублей", parse_mode='Markdown')
                 rb1.close()
 
 # Webhook обработчики
