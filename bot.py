@@ -49,6 +49,7 @@ def menu(message):
         global date_priem_column
         global stazh_k_column
         global stazh_column
+        global drivers_column
 
         if message.text == "Общая информация":
             bot.send_message(message.chat.id, "Ожидайте, собираю информацию")
