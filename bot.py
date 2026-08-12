@@ -102,7 +102,7 @@ def handle_message(message):
     but1 = types.KeyboardButton("Общая информация")
     but2 = types.KeyboardButton("Табель")
     markup.add(but1, but2)
-    bot.reply_to(message, "Здравствуйте, {0.first_name}\n Какая информация вас интересует?".format(message.from_user), parse_mode='html', reply_markup=markup)
+    bot.send_message(message.chat.id, "Здравствуйте, {0.first_name}\n Какая информация вас интересует?".format(message.from_user), parse_mode='html', reply_markup=markup)
 
 @bot.message_handler(func=lambda message: True)
 def menu(message):
@@ -259,3 +259,6 @@ if __name__ == '__main__':
     bot.remove_webhook()
     # Запускаем polling
     bot.polling(none_stop=True, interval=1)
+
+     # Заглушка для Render, чтобы он видел открытый порт
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)), debug=False)
