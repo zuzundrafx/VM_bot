@@ -255,10 +255,15 @@ def webhook():
         return 'Invalid content type', 403
 
 if __name__ == '__main__':
-    # Удаляем старый вебхук
-    bot.remove_webhook()
-    # Запускаем polling
-    bot.polling(none_stop=True, interval=1)
-
-     # Заглушка для Render, чтобы он видел открытый порт
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)), debug=False)
+    # Получаем порт из переменных окружения Render
+    port = int(os.environ.get('PORT', 10000))
+    
+    # Удаляем старый вебхук при старте
+    try:
+        bot.remove_webhook()
+        logger.info("Старый вебхук удален")
+    except Exception as e:
+        logger.error(f"Ошибка при удалении вебхука: {e}")
+    
+    # Запускаем Flask сервер
+    app.run(host='0.0.0.0', port=port, debug=False)
