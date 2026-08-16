@@ -255,6 +255,11 @@ def webhook():
         return 'Invalid content type', 403
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    # Удаляем старый вебхук
+    bot.remove_webhook()
+    # Запускаем polling
+    bot.polling(none_stop=True, interval=1)
+    
+    # Заглушка для Render, чтобы он видел открытый порт
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)), debug=False)
 
