@@ -254,6 +254,23 @@ def webhook():
     else:
         return 'Invalid content type', 403
 
+
+import threading
+import requests
+
+def keep_alive():
+    """Держит бота активным, отправляя запросы к самому себе"""
+    while True:
+        try:
+            requests.get(f"http://localhost:{int(os.environ.get('PORT', 10000))}/")
+            time.sleep(300)  # Каждые 5 минут
+        except Exception as e:
+            logger.error(f"Ошибка в keep_alive: {e}")
+            time.sleep(60)
+
+# Запускаем поток для поддержания активности
+threading.Thread(target=keep_alive, daemon=True).start()
+
 if __name__ == '__main__':
     # Удаляем вебхук при старте (на всякий случай)
     try:
