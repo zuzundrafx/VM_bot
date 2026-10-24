@@ -51,7 +51,9 @@ def download_file_from_yandex():
     """Скачивает файл с Яндекс.Диска и возвращает workbook"""
     try:
         base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
-        public_key = 'https://disk.yandex.ru/i/cyOG-61LXGmE-g'
+        public_key = 'https://disk.yandex.ru/d/Pqg05uuzmYebVg'
+
+        
         
         final_url = base_url + urlencode(dict(public_key=public_key))
         logger.info(f"Запрос к Яндекс.Диску: {final_url}")
