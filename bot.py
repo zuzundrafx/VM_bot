@@ -25,7 +25,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = os.getenv('BOT_TOKEN', '7084552505:AAGGKsgk3pWgWKlUxjhB2vfB7cmjI19VMyg')
+TOKEN = os.getenv('BOT_TOKEN', '7084552505:AAHWahurpNeMNKyz_BHJRKjkuCrZTFdmX8E')
 bot = telebot.TeleBot(TOKEN)
 
 app = Flask(__name__)
